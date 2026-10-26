@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Air Chords – Finger Synth</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>
+:root{--bg:#f3f3f8;--panel:#fff;--text:#15151f;--muted:#626274;--accent:#6a45ff;--border:#dcdce8;--stage:#0b0b10;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);color-scheme:light}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0d0d13;--panel:#17171f;--text:#f1f1f7;--muted:#9a9aae;--accent:#8b6bff;--border:#2a2a38;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#0d0d13;--panel:#17171f;--text:#f1f1f7;--muted:#9a9aae;--accent:#8b6bff;--border:#2a2a38;color-scheme:dark}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;line-height:1.45}
+main{max-width:1000px;margin:0 auto;padding:16px}
+h1{margin:0;font-size:1.6rem;letter-spacing:-.02em}
+.sub{color:var(--muted);margin:4px 0 14px;font-size:.95rem}
+.stage{position:relative;width:100%;aspect-ratio:4/3;max-height:68vh;background:var(--stage);border-radius:16px;overflow:hidden;margin:0 auto}
+.stage video{position:absolute;inset:0;width:100%;height:100%;object-fit:fill;transform:scaleX(-1);opacity:.85}
+.stage canvas{position:absolute;inset:0;width:100%;height:100%}
+.overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center;padding:20px;color:#fff;background:rgba(8,8,14,.72)}
+.overlay.hide{display:none}
+.overlay p{margin:0;max-width:34ch;color:#cfcfe0;font-size:.95rem}
+button{font:inherit;cursor:pointer}
+.big{background:var(--accent);color:#fff;border:0;border-radius:999px;padding:12px 26px;font-weight:600;font-size:1.05rem}
+.stat{position:absolute;left:10px;top:10px;background:rgba(0,0,0,.55);color:#fff;border-radius:999px;padding:4px 12px;font-size:.8rem}
+.panel{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:14px;margin-top:14px}
+.panel h2{margin:0 0 10px;font-size:1rem}
+.ctl{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+label{display:flex;flex-direction:column;gap:4px;font-size:.8rem;color:var(--muted)}
+select,input[type=range]{width:100%;font:inherit;color:var(--text)}
+select{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:6px}
+.chk{flex-direction:row;align-items:center;gap:8px;color:var(--text)}
+.presets{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.presets button{background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:999px;padding:6px 14px;font-size:.85rem}
+.presets button:hover{border-color:var(--accent)}
+.hands{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:700px){.hands{grid-template-columns:1fr}}
+.hands h3{margin:0 0 8px;font-size:.9rem;color:var(--muted);font-weight:600}
+.row{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px}
+.card{display:flex;flex-direction:column;gap:6px;min-width:0}
+.pad{background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:12px;padding:10px 2px;display:flex;flex-direction:column;align-items:center;gap:2px;touch-action:none;user-select:none;-webkit-user-select:none;transition:background .08s,transform .08s}
+.pad .fn{font-size:.68rem;color:var(--muted)}
+.pad .cn{font-size:1rem;font-weight:700}
+.card.on .pad{background:var(--accent);border-color:var(--accent);color:#fff;transform:scale(.96)}
+.card.on .pad .fn{color:#e6defc}
+.card select{padding:4px 2px;font-size:.75rem}
+.hint{color:var(--muted);font-size:.85rem;margin:10px 0 0}
+footer{text-align:center;color:var(--muted);font-size:.85rem;padding:22px 0 10px}
+footer a{color:var(--accent);font-weight:600;text-decoration:none}
+footer a:hover{text-decoration:underline}
+</style>
+</head>
+<body>
+<main>
+  <h1>🎹 Air Chords</h1>
+  <p class="sub">A webcam synthesizer you play with your fingers. Curl a finger to sound its chord, open it to let go.</p>
+
+  <section class="stage" id="stage">
+    <video id="v" playsinline muted></video>
+    <canvas id="c"></canvas>
+    <div class="stat" id="stat">Camera off</div>
+    <div class="overlay" id="ov">
+      <button class="big" id="start">Start camera &amp; sound</button>
+      <p id="msg">Your video stays in your browser and is never uploaded. You can also tap the chord pads below with the mouse or touch.</p>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Sound</h2>
+    <div class="ctl">
+      <label>Waveform<select id="wave"><option value="sawtooth">Saw</option><option value="triangle">Triangle</option><option value="square">Square</option><option value="sine">Sine</option></select></label>
+      <label>Octave<select id="oct"><option value="-1">−1</option><option value="0" selected>0</option><option value="1">+1</option></select></label>
+      <label>Release<input type="range" id="rel" min="0.1" max="2.5" step="0.05" value="0.6"></label>
+      <label>Reverb<input type="range" id="rev" min="0" max="1" step="0.01" value="0.35"></label>
+      <label>Volume<input type="range" id="vol" min="0" max="1" step="0.01" value="0.7"></label>
+      <label class="chk"><input type="checkbox" id="fx" checked> Hand height controls filter</label>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Chord allocation</h2>
+    <div class="presets" id="presets"></div>
+    <div class="hands">
+      <div><h3>Left hand</h3><div class="row" id="L"></div></div>
+      <div><h3>Right hand</h3><div class="row" id="R"></div></div>
+    </div>
+    <p class="hint">Pick a root and chord type for every finger, or load a preset. For the thumb, fold it across your palm. Hold your hands up so all fingers are visible, in good light.</p>
+  </section>
+
+  <footer>© 2026 Created by Joshua · <a href="https://joshuapeiris.me" target="_blank" rel="noopener">joshuapeiris.me</a></footer>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/hands.js" crossorigin="anonymous"></script>
+<script>
+const $=s=>document.querySelector(s);
+const NAMES=['C','C♯','D','D♯','E','F','F♯','G','G♯','A','A♯','B'];
+const Q={maj:{n:'',l:'major',i:[0,4,7]},min:{n:'m',l:'minor',i:[0,3,7]},'7':{n:'7',l:'dominant 7',i:[0,4,7,10]},maj7:{n:'maj7',l:'major 7',i:[0,4,7,11]},m7:{n:'m7',l:'minor 7',i:[0,3,7,10]},dim:{n:'dim',l:'diminished',i:[0,3,6]},m7b5:{n:'m7♭5',l:'half-dim',i:[0,3,6,10]},sus2:{n:'sus2',l:'sus2',i:[0,2,7]},sus4:{n:'sus4',l:'sus4',i:[0,5,7]},add9:{n:'add9',l:'add9',i:[0,4,7,14]},'5':{n:'5',l:'power',i:[0,7,12]},off:{n:'–',l:'off',i:[]}};
+const FING=['Thumb','Index','Middle','Ring','Pinky'];
+const TIP=[4,8,12,16,20],MCP=[2,5,9,13,17];
+const BONES=[[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
+const P=(...s)=>s.map(x=>{const [r,q]=x.split(':');return [+r,q]});
+const PRESETS={
+ 'Diatonic (C major)':{L:P('0:maj','2:min','4:min','5:maj','7:maj'),R:P('9:min','11:dim','0:maj7','5:maj7','7:7')},
+ 'Pop (I–V–vi–IV)':{L:P('0:maj','7:maj','9:min','5:maj','4:min'),R:P('2:min','0:sus2','5:add9','7:sus4','9:m7')},
+ 'A minor':{L:P('9:min','11:dim','0:maj','2:min','4:min'),R:P('5:maj','7:maj','9:m7','2:m7','4:7')},
+ 'Jazz':{L:P('0:maj7','2:m7','4:m7','5:maj7','7:7'),R:P('9:m7','11:m7b5','0:maj7','2:m7','7:7')}
+};
+let cfg=JSON.parse(JSON.stringify(PRESETS['Diatonic (C major)']));
+try{const s=localStorage.getItem('airchords.cfg');if(s){const o=JSON.parse(s);if(o&&o.L&&o.R)cfg=o}}catch(e){}
+const save=()=>{try{localStorage.setItem('airchords.cfg',JSON.stringify(cfg))}catch(e){}};
+
+/* ---------- audio ---------- */
+let ac,master,filter,dry,wet,conv;
+function ensureAudio(){
+  if(!ac){
+    ac=new (window.AudioContext||window.webkitAudioContext)();
+    master=ac.createGain();filter=ac.createBiquadFilter();filter.type='lowpass';filter.frequency.value=3500;filter.Q.value=1.4;
+    const comp=ac.createDynamicsCompressor();conv=ac.createConvolver();
+    const len=Math.floor(ac.sampleRate*2.4),b=ac.createBuffer(2,len,ac.sampleRate);
+    for(let c=0;c<2;c++){const d=b.getChannelData(c);for(let i=0;i<len;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/len,2.6)}
+    conv.buffer=b;dry=ac.createGain();wet=ac.createGain();
+    filter.connect(dry);filter.connect(conv);conv.connect(wet);dry.connect(master);wet.connect(master);master.connect(comp);comp.connect(ac.destination);
+    setMix();
+  }
+  if(ac.state==='suspended')ac.resume();
+}
+function setMix(){if(!ac)return;const r=+$('#rev').value;master.gain.value=+$('#vol').value;dry.gain.value=1-r*.5;wet.gain.value=r*1.2}
+['#rev','#vol'].forEach(s=>$(s).addEventListener('input',setMix));
+const chordName=id=>{const [r,q]=cfg[id[0]][+id[1]];return q==='off'?'–':NAMES[r]+Q[q].n};
+const voices={};
+function noteOn(id){
+  ensureAudio();if(voices[id])return;
+  const [r,q]=cfg[id[0]][+id[1]],iv=Q[q].i;if(!iv.length)return;
+  const g=ac.createGain(),oscs=[],t=ac.currentTime,shift=+$('#oct').value*12;
+  g.connect(filter);
+  iv.forEach(i=>{[-7,7].forEach(det=>{
+    const o=ac.createOscillator(),og=ac.createGain();
+    o.type=$('#wave').value;o.frequency.value=440*Math.pow(2,(48+shift+r+i-69)/12);o.detune.value=det;
+    og.gain.value=.3/iv.length;o.connect(og);og.connect(g);o.start();oscs.push(o);
+  })});
+  g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(1,t+.03);
+  voices[id]={g,oscs};
+}
+function noteOff(id){
+  const v=voices[id];if(!v)return;delete voices[id];
+  const t=ac.currentTime,r=+$('#rel').value;
+  v.g.gain.cancelScheduledValues(t);v.g.gain.setValueAtTime(v.g.gain.value,t);v.g.gain.linearRampToValueAtTime(0,t+r);
+  v.oscs.forEach(o=>o.stop(t+r+.05));setTimeout(()=>v.g.disconnect(),(r+.3)*1000);
+}
+
+/* ---------- finger state ---------- */
+const st={},ptr={},cards={};
+function sync(id){
+  const want=!!(st[id]||ptr[id]);
+  if(want&&!voices[id])noteOn(id);else if(!want&&voices[id])noteOff(id);
+  cards[id]&&cards[id].classList.toggle('on',want);
+}
+function refresh(id){
+  const el=cards[id],[r,q]=cfg[id[0]][+id[1]];
+  el.querySelector('.cn').textContent=chordName(id);
+  el.querySelector('.r').value=r;el.querySelector('.q').value=q;
+}
+
+/* ---------- UI ---------- */
+function build(){
+  const qopts=Object.entries(Q).map(([k,v])=>`<option value="${k}">${v.l}</option>`).join('');
+  const ropts=NAMES.map((n,i)=>`<option value="${i}">${n}</option>`).join('');
+  for(const side of ['L','R']){
+    const box=$('#'+side);
+    for(let k=0;k<5;k++){
+      const id=side+k,el=document.createElement('div');
+      el.className='card';
+      el.innerHTML=`<button class="pad" aria-label="${FING[k]} chord"><span class="fn">${FING[k]}</span><span class="cn"></span></button><select class="r" aria-label="Root">${ropts}</select><select class="q" aria-label="Chord type">${qopts}</select>`;
+      box.appendChild(el);cards[id]=el;
+      const pad=el.querySelector('.pad');
+      pad.addEventListener('pointerdown',e=>{e.preventDefault();ptr[id]=1;sync(id)});
+      ['pointerup','pointerleave','pointercancel'].forEach(ev=>pad.addEventListener(ev,()=>{if(ptr[id]){ptr[id]=0;sync(id)}}));
+      const change=()=>{
+        cfg[side][k]=[+el.querySelector('.r').value,el.querySelector('.q').value];
+        save();refresh(id);
+        if(voices[id]){noteOff(id);sync(id)}
+      };
+      el.querySelector('.r').addEventListener('change',change);
+      el.querySelector('.q').addEventListener('change',change);
+      refresh(id);
+    }
+  }
+  const pb=$('#presets');
+  for(const name in PRESETS){
+    const b=document.createElement('button');b.textContent=name;
+    b.addEventListener('click',()=>{
+      cfg=JSON.parse(JSON.stringify(PRESETS[name]));save();
+      for(const id in cards){if(voices[id])noteOff(id);refresh(id)}
+    });
+    pb.appendChild(b);
+  }
+}
+build();
+
+/* ---------- hand tracking ---------- */
+let hands,busy=false,AR=4/3,seen={L:null,R:null};
+const v=$('#v'),cv=$('#c'),stage=$('#stage');
+const d=(a,b)=>Math.hypot((a.x-b.x)*AR,a.y-b.y);
+function curled(lm,k,was){
+  if(k===0){const r=d(lm[4],lm[9])/d(lm[0],lm[9]);return was?r<.85:r<.6}
+  const r=d(lm[TIP[k]],lm[0])/d(lm[MCP[k]],lm[0]);return was?r<1.65:r<1.3;
+}
+function onResults(r){
+  const s={L:null,R:null};
+  (r.multiHandLandmarks||[]).forEach((lm,i)=>{
+    // video is un-mirrored, MediaPipe assumes mirrored, so swap labels
+    let side=(r.multiHandedness[i].label==='Left')?'R':'L';
+    if(s[side])side=side==='L'?'R':'L';
+    s[side]=lm;
+  });
+  seen=s;
+  for(const side of ['L','R'])for(let k=0;k<5;k++){
+    const id=side+k;st[id]=s[side]?curled(s[side],k,!!st[id]):false;sync(id);
+  }
+  const ys=['L','R'].filter(x=>s[x]).map(x=>s[x][0].y);
+  $('#stat').textContent=ys.length?`Tracking ${s.L?'left ':''}${s.L&&s.R?'+ ':''}${s.R?'right ':''}hand`:'Show your hands';
+  if(ac&&$('#fx').checked&&ys.length){
+    const y=ys.reduce((a,b)=>a+b,0)/ys.length,t=Math.min(1,Math.max(0,(0.9-y)/0.8));
+    filter.frequency.setTargetAtTime(250*Math.pow(24,t),ac.currentTime,.05);
+  }
+}
+function draw(){
+  const w=stage.clientWidth,h=stage.clientHeight,dpr=window.devicePixelRatio||1;
+  if(cv.width!==Math.round(w*dpr)||cv.height!==Math.round(h*dpr)){cv.width=Math.round(w*dpr);cv.height=Math.round(h*dpr)}
+  const x=cv.getContext('2d');x.setTransform(dpr,0,0,dpr,0,0);x.clearRect(0,0,w,h);
+  const pt=p=>[(1-p.x)*w,p.y*h];
+  x.textAlign='center';x.font='700 15px system-ui,sans-serif';
+  for(const side of ['L','R']){
+    const lm=seen[side];if(!lm)continue;
+    x.strokeStyle='rgba(255,255,255,.55)';x.lineWidth=2;
+    BONES.forEach(([a,b])=>{const A=pt(lm[a]),B=pt(lm[b]);x.beginPath();x.moveTo(A[0],A[1]);x.lineTo(B[0],B[1]);x.stroke()});
+    for(let k=0;k<5;k++){
+      const id=side+k,on=!!st[id],[px,py]=pt(lm[TIP[k]]);
+      x.beginPath();x.arc(px,py,on?15:9,0,7);x.fillStyle=on?'#8b6bff':'rgba(255,255,255,.85)';x.fill();
+      x.fillStyle='#fff';x.strokeStyle='rgba(0,0,0,.6)';x.lineWidth=3;
+      x.strokeText(chordName(id),px,py-20);x.fillText(chordName(id),px,py-20);
+    }
+  }
+}
+async function loop(){
+  if(hands&&v.readyState>=2&&!busy){busy=true;try{await hands.send({image:v})}catch(e){}busy=false}
+  draw();requestAnimationFrame(loop);
+}
+function say(t){$('#msg').textContent=t}
+$('#start').addEventListener('click',async()=>{
+  const btn=$('#start');btn.disabled=true;ensureAudio();say('Requesting camera…');
+  try{
+    const stream=await navigator.mediaDevices.getUserMedia({video:{width:640,height:480,facingMode:'user'},audio:false});
+    v.srcObject=stream;await v.play();
+    AR=v.videoWidth/v.videoHeight||4/3;stage.style.aspectRatio=`${v.videoWidth}/${v.videoHeight}`;
+  }catch(e){
+    say('Camera blocked ('+(e&&e.name||'error')+'). This preview frame probably isn’t allowed to use the camera. Download the file and open it in Chrome or Edge, or host it on any https site, to use hand tracking. The chord pads still work.');
+    btn.style.display='none';$('#stat').textContent='Camera off';
+    setTimeout(()=>$('#ov').classList.add('hide'),9000);return;
+  }
+  if(!window.Hands){say('The hand-tracking library could not be loaded. The chord pads below still work.');btn.style.display='none';return}
+  try{
+    say('Loading hand model…');
+    hands=new Hands({locateFile:f=>`https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/${f}`});
+    hands.setOptions({maxNumHands:2,modelComplexity:1,minDetectionConfidence:.6,minTrackingConfidence:.5});
+    hands.onResults(onResults);
+    await hands.initialize();
+    $('#ov').classList.add('hide');$('#stat').textContent='Show your hands';
+    loop();
+  }catch(e){
+    hands=null;
+    say('The hand model could not be loaded (this host may block model files). Use the chord pads below, or save this page and open it locally.');
+    btn.style.display='none';
+  }
+});
+</script>
+</body>
+</html>
